@@ -5,6 +5,12 @@
   const inputEl = document.getElementById("input");
   const sendBtn = document.getElementById("send");
   const modelBadge = document.getElementById("model-badge");
+  const debugBtn = document.getElementById("debug-btn");
+  const logPanel = document.getElementById("log-panel");
+  const logOutput = document.getElementById("log-output");
+  const logClearBtn = document.getElementById("log-clear");
+  const logCloseBtn = document.getElementById("log-close");
+  let logVisible = false;
 
   let history = []; // [{role, content}]
   let ws = null;
@@ -12,12 +18,26 @@
 
   function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
+    clientLog("Connecting WebSocket to " + proto + "://" + location.host + "/");
     ws = new WebSocket(`${proto}://${location.host}/`);
-    ws.onopen = function () { fetchConfig(); };
+    ws.onopen = function () { clientLog("WebSocket opened"); fetchConfig(); };
     ws.onmessage = function (ev) { handleMessage(ev.data); };
+    ws.onerror = function (e) { clientLog("WebSocket error: " + (e.message || "unknown")); };
     ws.onclose = function () {
+      clientLog("WebSocket closed");
       if (currentBubble) finalizeStream(null);
     };
+  }
+
+  function clientLog(msg) {
+    if (!logOutput) return;
+    const line = el("span", "log-line");
+    const lvl = el("span", "lvl info");
+    lvl.textContent = "[client]".padEnd(9);
+    line.appendChild(lvl);
+    line.appendChild(textNode(msg));
+    logOutput.appendChild(line);
+    if (logVisible) logOutput.scrollTop = logOutput.scrollHeight;
   }
 
   function fetchConfig() {
@@ -27,7 +47,9 @@
   }
 
   function handleMessage(raw) {
-    const msg = JSON.parse(raw);
+    let msg;
+    try { msg = JSON.parse(raw); } catch (e) { clientLog("Bad JSON from server: " + raw); return; }
+    clientLog("<- " + msg.type + (msg.type === "delta" ? " (" + (msg.text||"").length + " chars)" : ""));
     if (msg.type === "delta") {
       appendDelta(msg.text);
     } else if (msg.type === "done") {
@@ -96,10 +118,14 @@
   function send() {
     const text = inputEl.value.trim();
     if (!text) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      clientLog("Send failed: WebSocket not open (state " + (ws ? ws.readyState : "null") + ")");
+      return;
+    }
     history.push({ role: "user", content: text });
     inputEl.value = "";
     renderUserMessage(text);
+    clientLog("-> chat sent (" + text.length + " chars)");
     ws.send(JSON.stringify({ type: "chat", messages: history }));
   }
 
@@ -166,10 +192,40 @@
   }
   function textNode(t) { return document.createTextNode(t); }
 
+  function toggleLog() {
+    logVisible = !logVisible;
+    logPanel.hidden = !logVisible;
+    if (logVisible) fetchLog();
+  }
+
+  function clearLog() {
+    fetch("/log/clear").then(() => { logOutput.textContent = ""; }).catch(() => {});
+  }
+
+  function fetchLog() {
+    fetch("/log").then(r => r.json()).then(entries => {
+      logOutput.innerHTML = "";
+      (entries || []).forEach(e => {
+        const line = el("span", "log-line");
+        const lvl = el("span", "lvl " + (e.level || "info"));
+        lvl.textContent = ("[" + (e.level || "info") + "]").padEnd(7);
+        line.appendChild(lvl);
+        line.appendChild(textNode((e.time || "") + "  " + (e.msg || "")));
+        logOutput.appendChild(line);
+      });
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }).catch(err => {
+      logOutput.textContent = "Failed to load log: " + err;
+    });
+  }
+
   sendBtn.onclick = send;
   inputEl.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+    if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); send(); }
   });
+  debugBtn.onclick = toggleLog;
+  logCloseBtn.onclick = toggleLog;
+  logClearBtn.onclick = clearLog;
 
   connect();
 })();

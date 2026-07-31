@@ -5,6 +5,7 @@
   .rchat_env$.port <- NULL
   .rchat_env$.config <- NULL
   .rchat_env$.conversation <- NULL
+  .rchat_log_init()
   invisible()
 }
 

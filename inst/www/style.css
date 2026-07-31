@@ -60,3 +60,31 @@ body {
 #send { align-self: flex-end; padding: 8px 18px; font-size: 13px; }
 .typing { color: var(--muted); font-style: italic; }
 .error { color: #f48771; }
+#debug-btn {
+  background: none; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 12px;
+}
+#debug-btn:hover { color: var(--fg); }
+#log-panel {
+  display: flex; flex-direction: column; height: 180px;
+  border-top: 1px solid var(--border); background: #1a1a1a;
+}
+#log-panel[hidden] { display: none; }
+#log-panel header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; background: #252526; border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--fg);
+}
+.log-actions button {
+  background: #3a3d41; color: var(--fg); border: none; border-radius: 4px;
+  padding: 2px 8px; margin-left: 6px; cursor: pointer; font-size: 11px;
+}
+#log-output {
+  flex: 1; overflow: auto; margin: 0; padding: 8px 10px;
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11px;
+  white-space: pre-wrap; word-wrap: break-word; color: var(--fg);
+}
+.log-line { display: block; }
+.log-line .lvl { font-weight: 700; }
+.log-line .lvl.error { color: #f48771; }
+.log-line .lvl.info { color: #6c9ef8; }

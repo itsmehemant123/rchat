@@ -121,7 +121,7 @@
 
   acc <- .rchat_sse_accumulator(on_event)
   resp <- tryCatch(httr2::req_perform_stream(req, acc), error = function(e) e)
-  if (inherits(resp, "error")) stop(resp$message, call. = FALSE)
+  if (inherits(resp, "error")) .rchat_http_error("claude", resolved, resp)
 
   tool_calls <- lapply(seq_along(tool_blocks), function(i) {
     b <- tool_blocks[[i]]
@@ -131,6 +131,16 @@
   if (!length(tool_calls)) tool_calls <- NULL
 
   list(role = "assistant", content = text, tool_calls = tool_calls)
+}
+
+# Enrich and log an httr2 error, then stop with a helpful message.
+.rchat_http_error <- function(provider, resolved, e) {
+  status <- e$status %||% "?"
+  body_txt <- tryCatch(rawToChar(e$body), error = function(x) "?")
+  .rchat_log("HTTP error [", provider, "] ", resolved$base_url, " status=", status,
+             " body=", substr(body_txt, 1, 500), level = "error")
+  detail <- if (nzchar(body_txt)) paste0(" (", substr(body_txt, 1, 300), ")") else ""
+  stop(sprintf("%s request failed: %s%s", provider, conditionMessage(e), detail), call. = FALSE)
 }
 
 .rchat_openai_chat <- function(cfg, resolved, messages, tools, stream_cb) {
@@ -150,25 +160,41 @@
   tool_calls <- list()
 
   on_event <- function(ev, data) {
-    if (identical(data$type, "message.delta")) {
-      delta <- data$delta
-      if (!is.null(delta$content)) {
-        d <- delta$content
-        if (length(d) && !is.null(d[[1]]$text)) {
-          text <<- paste0(text, d[[1]]$text)
-          if (!is.null(stream_cb)) stream_cb(d[[1]]$text)
+    choices <- data$choices
+    if (!is.list(choices) || !length(choices)) return(invisible())
+    ch <- choices[[1]]
+    delta <- ch$delta
+    if (is.null(delta)) return(invisible())
+    if (!is.null(delta$content)) {
+      d <- delta$content
+      if (is.character(d)) {
+        if (nzchar(d)) {
+          text <<- paste0(text, d)
+          if (!is.null(stream_cb)) stream_cb(d)
+        }
+      } else if (length(d)) {
+        for (part in d) {
+          if (is.character(part)) {
+            text <<- paste0(text, part)
+            if (!is.null(stream_cb)) stream_cb(part)
+          } else if (!is.null(part$text)) {
+            text <<- paste0(text, part$text)
+            if (!is.null(stream_cb)) stream_cb(part$text)
+          }
         }
       }
-      if (!is.null(delta$tool_calls)) {
-        for (tc in delta$tool_calls) {
-          idx <- tc$index + 1L
-          if (is.null(tool_calls[[idx]])) tool_calls[[idx]] <<- list(id = NULL, name = "", args = "")
-          if (!is.null(tc$id)) tool_calls[[idx]]$id <<- tc$id
-                fn <- tc[["function"]]
-          if (!is.null(fn)) {
-            if (nzchar(fn$name)) tool_calls[[idx]]$name <<- fn$name
-            if (!is.null(fn$arguments)) tool_calls[[idx]]$args <<- paste0(tool_calls[[idx]]$args, fn$arguments)
-          }
+    }
+    if (!is.null(delta$tool_calls)) {
+      for (tc in delta$tool_calls) {
+        idx <- tc$index + 1L
+        if (length(tool_calls) < idx || is.null(tool_calls[[idx]])) {
+          tool_calls[[idx]] <<- list(id = NULL, name = "", args = "")
+        }
+        if (!is.null(tc$id)) tool_calls[[idx]]$id <<- tc$id
+        fn <- tc[["function"]]
+        if (!is.null(fn)) {
+          if (nzchar(fn$name %||% "")) tool_calls[[idx]]$name <<- fn$name
+          if (!is.null(fn$arguments)) tool_calls[[idx]]$args <<- paste0(tool_calls[[idx]]$args, fn$arguments)
         }
       }
     }
@@ -176,7 +202,7 @@
 
   acc <- .rchat_sse_accumulator(on_event)
   resp <- tryCatch(httr2::req_perform_stream(req, acc), error = function(e) e)
-  if (inherits(resp, "error")) stop(resp$message, call. = FALSE)
+  if (inherits(resp, "error")) .rchat_http_error("openai", resolved, resp)
 
   parsed <- lapply(seq_along(tool_calls), function(i) {
     b <- tool_calls[[i]]
@@ -194,7 +220,11 @@
 rchat_llm_chat <- function(messages, tools, stream_cb = NULL) {
   cfg <- rchat_config()
   resolved <- .rchat_llm_resolve(cfg)
-  if (is.null(resolved$api_key)) stop("No API key set (RCHAT_API_KEY).", call. = FALSE)
+  if (is.null(resolved$api_key)) {
+    .rchat_log("No API key set (RCHAT_API_KEY)", level = "error")
+    stop("No API key set (RCHAT_API_KEY).", call. = FALSE)
+  }
+  .rchat_log("LLM call: provider=", cfg$provider, " model=", resolved$model, " url=", resolved$base_url)
   switch(
     cfg$provider,
     claude = .rchat_claude_chat(cfg, resolved, messages, tools, stream_cb),

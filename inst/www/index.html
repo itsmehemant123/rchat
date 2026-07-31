@@ -10,10 +10,21 @@
   <header id="toolbar">
     <span id="brand">RStudio Chat</span>
     <span id="model-badge"></span>
+    <button id="debug-btn" title="Toggle debug log viewer">Debug</button>
   </header>
   <main id="messages"></main>
+  <section id="log-panel" hidden>
+    <header>
+      <span>Debug Log</span>
+      <span class="log-actions">
+        <button id="log-clear">Clear</button>
+        <button id="log-close">Close</button>
+      </span>
+    </header>
+    <pre id="log-output"></pre>
+  </section>
   <footer id="composer">
-    <textarea id="input" rows="3" placeholder="Ask to analyze data, write R code, run it..."></textarea>
+    <textarea id="input" rows="3" placeholder="Ask to analyze data, write R code, run it... (Shift+Enter to send)"></textarea>
     <button id="send">Send</button>
   </footer>
   <script src="app.js"></script>

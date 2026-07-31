@@ -43,7 +43,9 @@ rchat_start <- function(port = NULL, launch = TRUE) {
     onWSOpen = function(ws) .rchat_ws_open(ws),
     staticPaths = list(
       "/" = www,
-      "/config" = httpuv::excludeStaticPath()
+      "/config" = httpuv::excludeStaticPath(),
+      "/log" = httpuv::excludeStaticPath(),
+      "/log/clear" = httpuv::excludeStaticPath()
     ),
     staticPathOptions = httpuv::staticPathOptions(indexhtml = TRUE)
   )
@@ -73,21 +75,36 @@ rchat_stop <- function() {
 }
 
 .rchat_router <- function(req) {
-  if (identical(req$PATH_INFO, "/config")) {
+  path <- req$PATH_INFO
+  if (identical(path, "/config")) {
     return(list(status = 200L, headers = list("Content-Type" = "application/json"),
                 body = jsonlite::toJSON(rchat_config(), auto_unbox = TRUE, null = "null")))
+  }
+  if (identical(path, "/log")) {
+    .rchat_log("GET /log by client")
+    return(list(status = 200L, headers = list("Content-Type" = "application/json"),
+                body = jsonlite::toJSON(.rchat_log_dump(), auto_unbox = TRUE, null = "null")))
+  }
+  if (identical(path, "/log/clear")) {
+    .rchat_log_clear()
+    return(list(status = 200L, headers = list("Content-Type" = "application/json"),
+                body = "[]"))
   }
   list(status = 404L, headers = list("Content-Type" = "text/plain"), body = "Not found")
 }
 
 .rchat_ws_open <- function(ws) {
+  .rchat_log("WebSocket client connected")
+  ws$onClose(function() .rchat_log("WebSocket client disconnected"))
   ws$onMessage(function(binary, raw) {
     text <- if (binary) rawToChar(raw) else raw
     msg <- tryCatch(jsonlite::fromJSON(text, simplifyVector = FALSE), error = function(e) NULL)
     if (is.null(msg)) {
+      .rchat_log("WebSocket: invalid JSON payload: ", substr(text, 1, 200), level = "error")
       .rchat_ws_send(ws, list(type = "error", message = "Invalid JSON payload"))
       return(invisible())
     }
+    .rchat_log("WebSocket message: type=", msg$type %||% "?")
     if (identical(msg$type, "chat")) {
       .rchat_handle_chat(ws, msg)
     } else if (identical(msg$type, "insert")) {
@@ -100,6 +117,8 @@ rchat_stop <- function() {
       .rchat_ws_send(ws, list(type = "tool_result", tool = "run_r_code", result = res))
     } else if (identical(msg$type, "config")) {
       .rchat_ws_send(ws, list(type = "config", config = rchat_config()))
+    } else if (identical(msg$type, "ping")) {
+      .rchat_ws_send(ws, list(type = "pong"))
     }
   })
 }
@@ -111,18 +130,22 @@ rchat_stop <- function() {
 .rchat_handle_chat <- function(ws, msg) {
   msgs <- msg$messages
   if (is.null(msgs) || !length(msgs)) {
+    .rchat_log("chat: no messages", level = "error")
     .rchat_ws_send(ws, list(type = "error", message = "No messages provided"))
     return(invisible())
   }
+  .rchat_log("chat: agent starting with ", length(msgs), " messages")
   text <- tryCatch(
     rchat_agent_respond(msgs, stream_cb = function(delta) {
       .rchat_ws_send(ws, list(type = "delta", text = delta))
     }),
     error = function(e) {
+      .rchat_log("chat: agent error: ", conditionMessage(e), level = "error")
       .rchat_ws_send(ws, list(type = "error", message = conditionMessage(e)))
       return(invisible())
     }
   )
+  .rchat_log("chat: agent done")
   .rchat_ws_send(ws, list(type = "done", text = text))
   invisible()
 }

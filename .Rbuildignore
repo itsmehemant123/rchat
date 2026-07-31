@@ -1,0 +1,8 @@
+^\.opencode-session$
+^\.Rbuildignore$
+^rstudiochat_0\.1\.0\.tar\.gz$
+^\.git$
+^\.gitignore$
+^README\.md$
+^.*\.Rproj$
+^\.Rproj\.user$
