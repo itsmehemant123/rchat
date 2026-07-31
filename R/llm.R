@@ -83,7 +83,7 @@
   }
 }
 
-.rchat_claude_chat <- function(cfg, resolved, messages, tools, stream_cb) {
+.rchat_claude_chat <- function(cfg, resolved, messages, tools, stream_cb, think_cb) {
   body <- list(
     model = resolved$model,
     max_tokens = 4096,
@@ -111,6 +111,8 @@
       if (identical(delta$type, "text_delta")) {
         text <<- paste0(text, delta$text)
         if (!is.null(stream_cb)) stream_cb(delta$text)
+      } else if (identical(delta$type, "thinking_delta")) {
+        if (!is.null(think_cb) && !is.null(delta$thinking)) think_cb(delta$thinking)
       } else if (identical(delta$type, "input_json_delta")) {
         idx <- data$index + 1L
         if (is.null(tool_blocks[[idx]])) tool_blocks[[idx]] <<- list(id = NA_character_, name = NA_character_, args = "")
@@ -143,7 +145,7 @@
   stop(sprintf("%s request failed: %s%s", provider, conditionMessage(e), detail), call. = FALSE)
 }
 
-.rchat_openai_chat <- function(cfg, resolved, messages, tools, stream_cb) {
+.rchat_openai_chat <- function(cfg, resolved, messages, tools, stream_cb, think_cb) {
   body <- list(
     model = resolved$model,
     stream = TRUE,
@@ -165,6 +167,11 @@
     ch <- choices[[1]]
     delta <- ch$delta
     if (is.null(delta)) return(invisible())
+    if (!is.null(delta$reasoning) && nzchar(delta$reasoning)) {
+      if (!is.null(think_cb)) think_cb(delta$reasoning)
+    } else if (!is.null(delta$reasoning_content) && nzchar(delta$reasoning_content)) {
+      if (!is.null(think_cb)) think_cb(delta$reasoning_content)
+    }
     if (!is.null(delta$content)) {
       d <- delta$content
       if (is.character(d)) {
@@ -217,7 +224,7 @@
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 # Public entry point. messages: list(system=..., content=...)  tools: normalized.
-rchat_llm_chat <- function(messages, tools, stream_cb = NULL) {
+rchat_llm_chat <- function(messages, tools, stream_cb = NULL, think_cb = NULL) {
   cfg <- rchat_config()
   resolved <- .rchat_llm_resolve(cfg)
   if (is.null(resolved$api_key)) {
@@ -227,7 +234,7 @@ rchat_llm_chat <- function(messages, tools, stream_cb = NULL) {
   .rchat_log("LLM call: provider=", cfg$provider, " model=", resolved$model, " url=", resolved$base_url)
   switch(
     cfg$provider,
-    claude = .rchat_claude_chat(cfg, resolved, messages, tools, stream_cb),
-    openai = .rchat_openai_chat(cfg, resolved, messages, tools, stream_cb)
+    claude = .rchat_claude_chat(cfg, resolved, messages, tools, stream_cb, think_cb),
+    openai = .rchat_openai_chat(cfg, resolved, messages, tools, stream_cb, think_cb)
   )
 }

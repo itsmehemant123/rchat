@@ -136,9 +136,10 @@ rchat_stop <- function() {
   }
   .rchat_log("chat: agent starting with ", length(msgs), " messages")
   text <- tryCatch(
-    rchat_agent_respond(msgs, stream_cb = function(delta) {
-      .rchat_ws_send(ws, list(type = "delta", text = delta))
-    }),
+    rchat_agent_respond(msgs,
+      stream_cb = function(delta) .rchat_ws_send(ws, list(type = "delta", text = delta)),
+      think_cb = function(delta) .rchat_ws_send(ws, list(type = "thinking", text = delta))
+    ),
     error = function(e) {
       .rchat_log("chat: agent error: ", conditionMessage(e), level = "error")
       .rchat_ws_send(ws, list(type = "error", message = conditionMessage(e)))

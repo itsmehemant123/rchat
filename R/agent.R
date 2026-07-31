@@ -51,8 +51,9 @@
   }
 }
 
-# frontend_messages: list of list(role=, content=); stream_cb receives text deltas.
-rchat_agent_respond <- function(frontend_messages, stream_cb = NULL) {
+# frontend_messages: list of list(role=, content=); stream_cb receives response deltas,
+# think_cb receives reasoning/thinking deltas.
+rchat_agent_respond <- function(frontend_messages, stream_cb = NULL, think_cb = NULL) {
   cfg <- rchat_config()
   provider <- cfg$provider
   tools <- .rchat_tools()
@@ -70,7 +71,7 @@ rchat_agent_respond <- function(frontend_messages, stream_cb = NULL) {
       final_text <- paste0(final_text, "\n[stopped after max iterations]")
       break
     }
-    assistant <- rchat_llm_chat(list(system = system, content = messages), tools, stream_cb)
+    assistant <- rchat_llm_chat(list(system = system, content = messages), tools, stream_cb, think_cb)
     messages[[length(messages) + 1L]] <- .rchat_encode_assistant(provider, assistant)
 
     if (is.null(assistant$tool_calls)) {

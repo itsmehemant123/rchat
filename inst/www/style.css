@@ -41,6 +41,19 @@ body {
   border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 12.5px;
 }
 .bubble pre code { font-family: "SF Mono", Menlo, Consolas, monospace; }
+.bubble details.thinking {
+  margin-bottom: 8px; padding: 6px 8px; border: 1px dashed var(--border);
+  border-radius: 6px; background: #16181a; opacity: 0.92;
+}
+.bubble details.thinking summary {
+  cursor: pointer; color: var(--muted); font-style: italic; font-size: 12px;
+  user-select: none;
+}
+.bubble details.thinking summary::before { content: "💭 "; }
+.bubble details.thinking pre.think {
+  margin: 6px 0 0 0; background: transparent; border: none; padding: 0;
+  color: var(--muted); font-style: italic; white-space: pre-wrap;
+}
 .bubble ul, .bubble ol { padding-left: 20px; }
 .actions { margin-top: 6px; display: flex; gap: 8px; }
 .actions button, #send {

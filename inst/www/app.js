@@ -14,7 +14,7 @@
 
   let history = []; // [{role, content}]
   let ws = null;
-  let currentBubble = null;
+  let currentMsg = null; // {div, bubble, think, thinkPre, resp, typing}
 
   function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -49,14 +49,16 @@
   function handleMessage(raw) {
     let msg;
     try { msg = JSON.parse(raw); } catch (e) { clientLog("Bad JSON from server: " + raw); return; }
-    clientLog("<- " + msg.type + (msg.type === "delta" ? " (" + (msg.text||"").length + " chars)" : ""));
+    clientLog("<- " + msg.type + " (" + (msg.text ? msg.text.length : 0) + " chars)");
     if (msg.type === "delta") {
       appendDelta(msg.text);
+    } else if (msg.type === "thinking") {
+      appendThinking(msg.text);
     } else if (msg.type === "done") {
       finalizeStream(msg.text);
     } else if (msg.type === "error") {
-      if (currentBubble) {
-        currentBubble.appendChild(errorEl(msg.message));
+      if (currentMsg) {
+        currentMsg.bubble.appendChild(errorEl(msg.message));
         finalizeStream(null);
       } else {
         const div = el("div", "msg assistant");
@@ -68,41 +70,67 @@
     }
   }
 
+  function ensureMsg() {
+    if (currentMsg) return currentMsg;
+    const div = el("div", "msg assistant");
+    const bubble = el("div", "bubble");
+    const typing = el("span", "typing");
+    typing.appendChild(textNode("Working..."));
+    bubble.appendChild(typing);
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    currentMsg = { div: div, bubble: bubble, think: null, thinkPre: null, resp: null, typing: typing };
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return currentMsg;
+  }
+
+  function removeTyping(m) {
+    if (m.typing) { m.typing.remove(); m.typing = null; }
+  }
+
+  function appendThinking(text) {
+    const m = ensureMsg();
+    if (!m.think) {
+      m.think = el("details", "thinking");
+      m.think.appendChild(el("summary").appendChild(textNode("Thinking")));
+      m.thinkPre = el("pre", "think");
+      m.think.appendChild(m.thinkPre);
+      m.bubble.insertBefore(m.think, m.bubble.firstChild);
+    }
+    m.thinkPre.textContent += text;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
   function appendDelta(text) {
-    if (!currentBubble) {
-      currentBubble = newBubble();
+    const m = ensureMsg();
+    if (!m.resp) {
+      removeTyping(m);
+      m.resp = el("pre", "raw");
+      m.bubble.appendChild(m.resp);
     }
-    const pre = currentBubble.querySelector("pre.raw");
-    if (!pre) {
-      currentBubble.appendChild(el("pre", "raw").appendChild(textNode(text)));
-    } else {
-      pre.textContent += text;
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
+    m.resp.textContent += text;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
   function finalizeStream(text) {
-    if (currentBubble) {
-      // Render markdown, replacing raw pre
-      const content = text != null ? text : (currentBubble.querySelector("pre.raw") || {}).textContent || "";
-      const pre = currentBubble.querySelector("pre.raw");
-      if (pre) pre.remove();
-      const rendered = renderMarkdown(content);
-      rendered.forEach(n => currentBubble.insertBefore(n, currentBubble.querySelector(".actions")));
+    if (currentMsg) {
+      const m = currentMsg;
+      let content;
+      if (text != null) content = text;
+      else if (m.resp) content = m.resp.textContent;
+      else content = "";
+      if (m.resp) m.resp.remove();
+      const actionsAnchor = m.bubble.querySelector(".actions");
+      if (content && content.trim()) {
+        renderMarkdown(content).forEach(n => m.bubble.insertBefore(n, actionsAnchor));
+        if (text != null && text.trim()) history.push({ role: "assistant", content: text.trim() });
+      } else if (m.thinkPre && m.thinkPre.textContent.trim()) {
+        history.push({ role: "assistant", content: m.thinkPre.textContent.trim() });
+      }
+      if (m.think) m.think.open = false; // collapse reasoning once finished
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      if (text != null && text.trim()) history.push({ role: "assistant", content: text.trim() });
     }
-    currentBubble = null;
-  }
-
-  function newBubble() {
-    const div = el("div", "msg assistant");
-    const bubble = el("div", "bubble");
-    bubble.appendChild(el("span", "typing").appendChild(textNode("Thinking...")));
-    div.appendChild(bubble);
-    messagesEl.appendChild(div);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-    return bubble;
+    currentMsg = null;
   }
 
   function renderToolResult(msg) {
