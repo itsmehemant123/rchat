@@ -1,0 +1,4 @@
+Name: RStudio Chat
+Description: Open the chat panel in the Viewer pane.
+Binding: rchat_addin
+Interactive: true

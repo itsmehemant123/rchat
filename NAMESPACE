@@ -1,0 +1,5 @@
+export(rchat_start)
+export(rchat_stop)
+export(rchat_config)
+export(rchat_set_config)
+importFrom(utils,capture.output)

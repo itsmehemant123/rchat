@@ -1,0 +1,20 @@
+Package: rstudiochat
+Type: Package
+Title: Chat Sidebar for RStudio
+Version: 0.1.0
+Authors@R: person("RStudio", "Chat", email = "dev@example.com", role = c("aut", "cre"))
+Description: A Copilot/Claude-style chat panel for RStudio that connects to
+    Anthropic- or OpenAI-compatible LLM providers and runs a tool-use agent
+    that can inspect and control the R session via the rstudioapi.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    httpuv,
+    httr2,
+    jsonlite,
+    utils
+Suggests:
+    testthat (>= 3.0.0),
+    rstudioapi
+Config/testthat/edition: 3
+RoxygenNote: 7.3.1
